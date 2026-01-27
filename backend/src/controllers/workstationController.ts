@@ -15,11 +15,14 @@ export const getAllWorkstations = async (req: Request, res: Response) => {
           },
         },
         assets: {
-          select: {
-            asset_id: true,
-            item_name: true,
-            property_tag_no: true,
-            serial_number: true,
+          include: {
+            details: {
+              select: {
+                item_name: true,
+                property_tag_no: true,
+                serial_number: true,
+              },
+            },
             units: {
               select: {
                 unit_name: true,

@@ -61,7 +61,7 @@ export const createLaboratory = async (req: Request, res: Response) => {
         lab_name,
         location: location || null,
         dept_id: dept_id ? parseInt(dept_id) : null,
-        lab_in_charge: lab_in_charge || null
+        in_charge_id: lab_in_charge ? parseInt(lab_in_charge) : null
       }
     });
 
@@ -109,7 +109,7 @@ export const updateLaboratory = async (req: Request, res: Response) => {
         lab_name: lab_name || existingLab.lab_name,
         location: location !== undefined ? location : existingLab.location,
         dept_id: dept_id !== undefined ? (dept_id ? parseInt(dept_id) : null) : existingLab.dept_id,
-        lab_in_charge: lab_in_charge !== undefined ? lab_in_charge : existingLab.lab_in_charge
+        in_charge_id: lab_in_charge !== undefined ? (lab_in_charge ? parseInt(lab_in_charge) : null) : existingLab.in_charge_id
       }
     });
 

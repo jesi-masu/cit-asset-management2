@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../api/axios";
+import { getLaboratories } from "../api/laboratories";
 import AddAssetModal from "../components/inventory/AddAssetModal";
 import EditAssetModal from "../components/inventory/EditAssetModal";
 import ViewWorkstationModal from "../components/inventory/ViewWorkstationModal";
@@ -9,15 +10,24 @@ import AddWorkstationModal from "../components/inventory/AddWorkstationModal";
 
 interface Asset {
   asset_id: number;
+  lab_id?: number;
   property_tag_no: string;
   item_name: string;
   description: string;
   serial_number: string;
   quantity: number;
-  laboratories?: { lab_name: string };
+  date_of_purchase: string;
+  laboratories?: { lab_id: number; lab_name: string };
   units?: { unit_name: string };
   workstation?: { workstation_name: string };
-  date_of_purchase: string;
+  details?: {
+    property_tag_no: string;
+    item_name: string;
+    description: string;
+    serial_number: string;
+    quantity: number;
+    date_of_purchase: string;
+  };
 }
 
 interface Workstation {
@@ -40,6 +50,13 @@ interface Workstation {
   }[];
 }
 
+interface Laboratory {
+  lab_id: number;
+  lab_name: string;
+  location?: string;
+}
+
+
 const InventoryPage = () => {
   const { user } = useAuth();
   const [showModal, setShowModal] = useState(false);
@@ -53,10 +70,13 @@ const InventoryPage = () => {
   const [showViewWSModal, setShowViewWSModal] = useState(false);
   const [showEditWSModal, setShowEditWSModal] = useState(false);
   const [showUnassignedAssets, setShowUnassignedAssets] = useState(false);
+  const [laboratories, setLaboratories] = useState<Laboratory[]>([]);
+  const [selectedLabId, setSelectedLabId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchInventory();
     fetchWorkstations();
+    fetchLaboratories();
   }, []);
 
   const fetchInventory = async () => {
@@ -74,6 +94,15 @@ const InventoryPage = () => {
       setWorkstations(res.data);
     } catch (err) {
       console.error("Error fetching workstations:", err);
+    }
+  };
+
+  const fetchLaboratories = async () => {
+    try {
+      const labs = await getLaboratories();
+      setLaboratories(labs);
+    } catch (err) {
+      console.error("Error fetching laboratories:", err);
     }
   };
 
@@ -137,6 +166,29 @@ const InventoryPage = () => {
 
   const unassignedAssets = assets.filter(asset => !asset.workstation);
 
+  // Filter workstations and assets by selected lab
+  const filteredWorkstations = selectedLabId 
+    ? workstations.filter(ws => ws.lab_id === selectedLabId)
+    : workstations;
+
+  const filteredUnassignedAssets = selectedLabId
+    ? unassignedAssets.filter(asset => asset.lab_id === selectedLabId)
+    : unassignedAssets;
+
+  // Get labs available to the current user
+  const availableLabs = user?.role === "Admin" 
+    ? laboratories 
+    : user?.lab_id 
+      ? laboratories.filter(lab => lab.lab_id === user.lab_id)
+      : [];
+
+  // Auto-select lab for custodians if they have one
+  useEffect(() => {
+    if (user?.role === "Custodian" && user.lab_id && !selectedLabId) {
+      setSelectedLabId(user.lab_id);
+    }
+  }, [user, selectedLabId]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -157,7 +209,7 @@ const InventoryPage = () => {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              🖥️ Workstations ({workstations.length})
+              🖥️ Workstations ({filteredWorkstations.length})
             </button>
             <button
               onClick={() => setShowUnassignedAssets(true)}
@@ -167,8 +219,41 @@ const InventoryPage = () => {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              📦 Unassigned Assets ({unassignedAssets.length})
+              📦 Other Assets ({filteredUnassignedAssets.length})
             </button>
+            
+            {/* Lab Filter Dropdown - Only show for Admins or Custodians with multiple labs */}
+            {(user?.role === "Admin" || (user?.role === "Custodian" && availableLabs.length > 1)) && (
+              <div className="flex items-center space-x-2">
+                <label htmlFor="lab-filter" className="text-sm font-medium text-gray-700">
+                  Filter by Lab:
+                </label>
+                <select
+                  id="lab-filter"
+                  value={selectedLabId || ''}
+                  onChange={(e) => setSelectedLabId(e.target.value ? Number(e.target.value) : null)}
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={user?.role === "Custodian" && availableLabs.length === 1}
+                >
+                  <option value="">All Laboratories</option>
+                  {availableLabs.map((lab) => (
+                    <option key={lab.lab_id} value={lab.lab_id}>
+                      {lab.lab_name} {lab.location && `(${lab.location})`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {/* Show current lab info for custodians with single lab */}
+            {user?.role === "Custodian" && availableLabs.length === 1 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-gray-700">Current Lab:</span>
+                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                  {availableLabs[0]?.lab_name} {availableLabs[0]?.location && `(${availableLabs[0]?.location})`}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
@@ -216,14 +301,14 @@ const InventoryPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {workstations.length === 0 ? (
+                {filteredWorkstations.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
                       No workstations found.
                     </td>
                   </tr>
                 ) : (
-                  workstations.map((workstation) => (
+                  filteredWorkstations.map((workstation) => (
                     <tr key={workstation.workstation_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="font-semibold text-blue-600">
@@ -294,28 +379,28 @@ const InventoryPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {unassignedAssets.length === 0 ? (
+                {filteredUnassignedAssets.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                       No unassigned assets found. All assets are assigned to workstations.
                     </td>
                   </tr>
                 ) : (
-                  unassignedAssets.map((asset) => (
+                  filteredUnassignedAssets.map((asset) => (
                     <tr key={asset.asset_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="font-semibold text-blue-600">
-                          {asset.property_tag_no}
+                          {asset.details?.property_tag_no || asset.property_tag_no}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {asset.item_name}
+                        {asset.details?.item_name || asset.item_name}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {asset.description}
+                        {asset.details?.description || asset.description}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {asset.serial_number}
+                        {asset.details?.serial_number || asset.serial_number}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
@@ -326,7 +411,7 @@ const InventoryPage = () => {
                         {asset.units?.unit_name || "N/A"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {asset.quantity}
+                        {asset.details?.quantity || asset.quantity}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button 

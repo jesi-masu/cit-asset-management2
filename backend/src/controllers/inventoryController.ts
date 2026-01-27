@@ -9,6 +9,7 @@ export const getInventory = async (req: Request, res: Response) => {
   try {
     const assets = await prisma.inventory_assets.findMany({
       include: {
+        details: true,
         laboratories: true,
         units: true,
         users: true,
@@ -37,28 +38,34 @@ export const createAsset = async (req: Request, res: Response) => {
       unit_id,
       workstation_id,
       date_of_purchase,
-      supplier_name,
     } = req.body;
 
     // Get user ID from authenticated request
     const user_id = req.user?.userId;
 
+    // Create the asset with nested details
     const newAsset = await prisma.inventory_assets.create({
       data: {
-        item_name,
-        description,
-        property_tag_no,
-        serial_number,
-        quantity: Number(quantity) || 1,
-        date_of_purchase: date_of_purchase ? new Date(date_of_purchase) : null,
-        supplier_name,
-        // Connect Foreign Keys (optional)
-        laboratories: lab_id ? { connect: { lab_id: Number(lab_id) } } : undefined,
-        units: unit_id ? { connect: { unit_id: Number(unit_id) } } : undefined,
-        workstation: workstation_id ? { connect: { workstation_id: Number(workstation_id) } } : undefined,
-        users: user_id ? { connect: { user_id: Number(user_id) } } : undefined,
+        // Main asset record (logistics)
+        lab_id: lab_id ? Number(lab_id) : null,
+        unit_id: unit_id ? Number(unit_id) : null,
+        workstation_id: workstation_id ? Number(workstation_id) : null,
+        added_by_user_id: user_id ? Number(user_id) : null,
+        
+        // Nested details record
+        details: {
+          create: {
+            item_name,
+            description,
+            property_tag_no,
+            serial_number,
+            quantity: Number(quantity) || 1,
+            date_of_purchase: date_of_purchase ? new Date(date_of_purchase) : null,
+          },
+        },
       },
       include: {
+        details: true,
         laboratories: true,
         units: true,
         users: true,
@@ -122,7 +129,6 @@ export const updateAsset = async (req: Request, res: Response) => {
       unit_id,
       workstation_id,
       date_of_purchase,
-      supplier_name,
     } = req.body;
 
     if (!assetId) {
@@ -131,32 +137,49 @@ export const updateAsset = async (req: Request, res: Response) => {
 
     // Check if asset exists
     const existingAsset = await prisma.inventory_assets.findUnique({
-      where: { asset_id: assetId }
+      where: { asset_id: assetId },
+      include: { details: true }
     });
 
     if (!existingAsset) {
       return res.status(404).json({ error: "Asset not found" });
     }
 
-    // Update the asset
+    // Update both the main asset record and the details
     const updatedAsset = await prisma.inventory_assets.update({
       where: { asset_id: assetId },
       data: {
-        item_name,
-        description,
-        property_tag_no,
-        serial_number,
-        quantity: Number(quantity) || 1,
-        date_of_purchase: date_of_purchase ? new Date(date_of_purchase) : null,
-        supplier_name,
-        // Connect Foreign Keys (optional)
-        laboratories: lab_id ? { connect: { lab_id: Number(lab_id) } } : undefined,
-        units: unit_id ? { connect: { unit_id: Number(unit_id) } } : undefined,
-        workstation: workstation_id ? { connect: { workstation_id: Number(workstation_id) } } : undefined,
+        // Update main asset record (logistics)
+        lab_id: lab_id ? Number(lab_id) : null,
+        unit_id: unit_id ? Number(unit_id) : null,
+        workstation_id: workstation_id ? Number(workstation_id) : null,
+        
+        // Update nested details record
+        details: existingAsset.details ? {
+          update: {
+            item_name,
+            description,
+            property_tag_no,
+            serial_number,
+            quantity: Number(quantity) || 1,
+            date_of_purchase: date_of_purchase ? new Date(date_of_purchase) : null,
+          },
+        } : {
+          create: {
+            item_name,
+            description,
+            property_tag_no,
+            serial_number,
+            quantity: Number(quantity) || 1,
+            date_of_purchase: date_of_purchase ? new Date(date_of_purchase) : null,
+          },
+        },
       },
       include: {
+        details: true,
         laboratories: true,
         units: true,
+        users: true,
         workstation: true,
       },
     });
