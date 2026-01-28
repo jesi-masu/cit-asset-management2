@@ -175,22 +175,51 @@ export const createUser = async (req: Request, res: Response) => {
     // 2. Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 3. Create User
-    const newUser = await prisma.users.create({
-      data: {
-        full_name,
-        email,
-        password_hash: hashedPassword,
-        role: role || "Custodian",
-        lab_id: lab_id ? Number(lab_id) : null,
-      },
+    // 3. Create User and update laboratory in_charge_id in a single transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the user
+      const newUser = await tx.users.create({
+        data: {
+          full_name,
+          email,
+          password_hash: hashedPassword,
+          role: role || "Custodian",
+          lab_id: lab_id ? Number(lab_id) : null,
+        },
+      });
+
+      // If creating a custodian with a lab assignment, update the laboratory's in_charge_id
+      if (lab_id && (role === "Custodian" || !role)) {
+        await tx.laboratories.update({
+          where: { lab_id: Number(lab_id) },
+          data: { in_charge_id: newUser.user_id },
+        });
+      }
+
+      return newUser;
     });
 
     // Exclude password from response
-    const { password_hash, ...userWithoutPassword } = newUser;
-    res.status(201).json(userWithoutPassword);
-  } catch (error) {
+    const { password_hash, ...userWithoutPassword } = result;
+    
+    res.status(201).json({
+      ...userWithoutPassword,
+      message: role === "Custodian" || !role 
+        ? "Custodian created and assigned as laboratory manager successfully" 
+        : "User created successfully"
+    });
+  } catch (error: any) {
     console.error("Create User Error:", error);
+    
+    // Handle specific database errors
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+    
+    if (error.code === 'P2025') {
+      return res.status(400).json({ error: "Laboratory not found" });
+    }
+    
     res.status(500).json({ error: "Failed to create user" });
   }
 };

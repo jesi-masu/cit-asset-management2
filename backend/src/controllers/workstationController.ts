@@ -173,3 +173,62 @@ export const deleteWorkstation = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to delete workstation" });
   }
 };
+
+// 5. BATCH CREATE WORKSTATIONS
+export const batchCreateWorkstations = async (req: Request, res: Response) => {
+  try {
+    const { workstations } = req.body;
+
+    if (!workstations || !Array.isArray(workstations) || workstations.length === 0) {
+      return res.status(400).json({ error: "Workstations array is required" });
+    }
+
+    // Validate each workstation entry
+    for (const ws of workstations) {
+      if (!ws.workstation_name || !ws.lab_id) {
+        return res.status(400).json({ 
+          error: "Each workstation must have a name and lab_id" 
+        });
+      }
+    }
+
+    // Create all workstations in a single transaction
+    const result = await prisma.$transaction(
+      workstations.map((ws: any) =>
+        prisma.workstations.create({
+          data: {
+            workstation_name: ws.workstation_name.trim(),
+            lab_id: parseInt(ws.lab_id),
+          },
+          include: {
+            laboratory: {
+              select: {
+                lab_name: true,
+                location: true,
+              },
+            },
+          },
+        })
+      )
+    );
+
+    res.status(201).json({
+      message: `Successfully created ${workstations.length} workstations`,
+      workstations: result,
+    });
+  } catch (error: any) {
+    console.error("Error batch creating workstations:", error);
+    
+    // Handle unique constraint violations
+    if (error.code === 'P2002') {
+      return res.status(400).json({ 
+        error: "One or more workstation names already exist in the specified lab" 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to create workstations",
+      details: error.message 
+    });
+  }
+};

@@ -11,6 +11,7 @@ import {
   getWorkstationDetails,
   updateWorkstation,
   deleteWorkstation,
+  batchCreateWorkstations,
 } from "./controllers/workstationController";
 import {
   getAllDailyReports,
@@ -48,6 +49,7 @@ app.delete("/inventory/:id", authenticateToken, deleteAsset);
 // Workstation Routes
 app.get("/workstations", authenticateToken, getAllWorkstations);
 app.post("/workstations", authenticateToken, createWorkstation);
+app.post("/workstations/batch", authenticateToken, batchCreateWorkstations);
 app.get("/workstations/:name", authenticateToken, getWorkstationDetails);
 app.put("/workstations/:id", authenticateToken, updateWorkstation);
 app.delete("/workstations/:id", authenticateToken, deleteWorkstation);
