@@ -82,7 +82,126 @@ export const createAsset = async (req: Request, res: Response) => {
   }
 };
 
-// 3. DELETE ASSET
+// 3. BATCH CREATE ASSETS
+export const batchCreateAssets = async (req: Request, res: Response) => {
+  try {
+    const { assets } = req.body;
+
+    if (!Array.isArray(assets) || assets.length === 0) {
+      return res.status(400).json({ error: "Assets array is required" });
+    }
+
+    // Get user ID from authenticated request
+    const user_id = req.user?.userId;
+
+    // Validate each asset
+    const validationErrors = [];
+    for (let i = 0; i < assets.length; i++) {
+      const asset = assets[i];
+      
+      if (!asset.item_name?.trim()) {
+        validationErrors.push(`Asset ${i + 1}: Item name is required`);
+      }
+      
+      if (!asset.lab_id) {
+        validationErrors.push(`Asset ${i + 1}: Lab ID is required`);
+      }
+      
+      if (!asset.unit_id) {
+        validationErrors.push(`Asset ${i + 1}: Unit ID is required`);
+      }
+      
+      if (!asset.device_type) {
+        validationErrors.push(`Asset ${i + 1}: Device type is required`);
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({ 
+        error: "Validation failed", 
+        details: validationErrors 
+      });
+    }
+
+    // Check if labs exist
+    const labIds = [...new Set(assets.map(a => a.lab_id))];
+    const existingLabs = await prisma.laboratories.findMany({
+      where: { lab_id: { in: labIds } },
+      select: { lab_id: true, lab_name: true }
+    });
+
+    const missingLabs = labIds.filter(id => !existingLabs.find(lab => lab.lab_id === id));
+    if (missingLabs.length > 0) {
+      return res.status(400).json({ 
+        error: "Invalid lab IDs", 
+        details: `Lab IDs not found: ${missingLabs.join(', ')}` 
+      });
+    }
+
+    // Create assets in batch
+    const createdAssets = await prisma.$transaction(async (tx) => {
+      const results = [];
+      
+      for (const asset of assets) {
+        const newAsset = await tx.inventory_assets.create({
+          data: {
+            lab_id: Number(asset.lab_id),
+            unit_id: Number(asset.unit_id),
+            workstation_id: asset.workstation_id ? Number(asset.workstation_id) : null,
+            added_by_user_id: user_id ? Number(user_id) : null,
+            
+            // Nested details record
+            details: {
+              create: {
+                item_name: asset.item_name.trim(),
+                property_tag_no: asset.property_tag_no?.trim() || "",
+                description: asset.description?.trim() || "",
+                serial_number: asset.serial_number?.trim() || "",
+                quantity: Number(asset.quantity) || 1,
+                date_of_purchase: asset.date_of_purchase ? new Date(asset.date_of_purchase) : null,
+              },
+            },
+          },
+          include: {
+            details: true,
+            laboratories: true,
+            units: true,
+            users: true,
+            workstation: true,
+          },
+        });
+        
+        results.push(newAsset);
+      }
+      
+      return results;
+    });
+
+    res.status(201).json({
+      message: `Successfully created ${createdAssets.length} assets`,
+      assets: createdAssets
+    });
+
+  } catch (error: any) {
+    console.error("Batch Create Assets Error:", error);
+    
+    // Handle specific database errors
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: "Duplicate entry detected" });
+    }
+    
+    if (error.code === 'P2025') {
+      return res.status(400).json({ error: "Related record not found" });
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to create assets",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+};
+
+// 4. DELETE ASSET
 export const deleteAsset = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

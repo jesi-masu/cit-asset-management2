@@ -33,6 +33,7 @@ export const login = async (req: Request, res: Response) => {
         name: user.full_name,
         email: user.email,
         role: user.role,
+        lab_id: user.lab_id, // Include lab assignment for custodians
       },
     });
   } catch (error) {

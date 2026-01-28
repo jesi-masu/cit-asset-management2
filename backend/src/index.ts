@@ -2,7 +2,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
-import { getInventory, createAsset, deleteAsset, updateAsset } from "./controllers/inventoryController";
+import { getInventory, createAsset, deleteAsset, updateAsset, batchCreateAssets } from "./controllers/inventoryController";
 import { login } from "./controllers/authController";
 import { getOrganizationData, createUser, getUserAssignedLab, getAllUsersWithAssignments, assignUserToLab } from "./controllers/userController";
 import {
@@ -43,6 +43,7 @@ app.post("/users", authenticateToken, requireRole(["Admin"]), createUser);
 
 app.get("/inventory", authenticateToken, getInventory);
 app.post("/inventory", authenticateToken, createAsset);
+app.post("/inventory/batch", authenticateToken, batchCreateAssets);
 app.put("/inventory/:id", authenticateToken, updateAsset);
 app.delete("/inventory/:id", authenticateToken, deleteAsset);
 
@@ -62,10 +63,33 @@ app.delete("/laboratories/:id", authenticateToken, requireRole(["Admin"]), delet
 
 app.get("/units", authenticateToken, async (req: Request, res: Response) => {
   try {
-    const units = await prisma.units.findMany();
+    const { device_type_id } = req.query;
+    
+    let units;
+    if (device_type_id) {
+      // Filter units by device type
+      units = await prisma.units.findMany({
+        where: {
+          device_type_id: Number(device_type_id)
+        }
+      });
+    } else {
+      // Get all units
+      units = await prisma.units.findMany();
+    }
+    
     res.json(units);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch units" });
+  }
+});
+
+app.get("/device-types", authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const deviceTypes = await prisma.device_types.findMany();
+    res.json(deviceTypes);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch device types" });
   }
 });
 
