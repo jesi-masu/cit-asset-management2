@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
+// 1. FIXED IMPORT: Import the new template generator
+import { generateTemplateReport } from "../../utils/generateTemplateReport";
+import { FileDown, Lock } from "lucide-react";
 
 interface WorkstationAsset {
   asset_id: number;
@@ -31,6 +34,13 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
   const [selectedLab, setSelectedLab] = useState<string>("");
   const [labs, setLabs] = useState<{ lab_id: number; lab_name: string }[]>([]);
 
+  // 1. NEW EFFECT: Auto-select and lock lab for Custodians
+  useEffect(() => {
+    if (show && user?.role === "Custodian" && user.lab_id) {
+      setSelectedLab(user.lab_id.toString());
+    }
+  }, [show, user]);
+
   useEffect(() => {
     if (show) {
       fetchLabs();
@@ -48,27 +58,43 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
   };
 
   const fetchWorkstations = async () => {
-    setLoading(true);
     try {
-      const url = selectedLab ? `/workstations?lab_id=${selectedLab}` : "/workstations";
-      const response = await api.get(url);
-      
-      const transformedWorkstations: Workstation[] = response.data.map((ws: any) => ({
+      setLoading(true);
+      let endpoint = "/workstations";
+
+      const response = await api.get(endpoint);
+
+      let data: Workstation[] = response.data.map((ws: any) => ({
         workstation_id: ws.workstation_id,
         workstation_name: ws.workstation_name,
-        lab_name: ws.laboratory?.lab_name || "N/A",
-        location: ws.laboratory?.location || "N/A",
-        assets: ws.assets?.map((asset: any) => ({
+        lab_name: ws.laboratory?.lab_name || null,
+        location: ws.laboratory?.location || null,
+        lab_id: ws.lab_id,
+        assets: ws.assets.map((asset: any) => ({
           asset_id: asset.asset_id,
-          property_tag_no: asset.details?.property_tag_no || null,
-          serial_number: asset.details?.serial_number || null,
-          description: asset.details?.description || null,
-          quantity: asset.details?.quantity || 1,
-          unit_name: asset.units?.unit_name || null,
-        })) || [],
+          property_tag_no:
+            asset.details?.property_tag_no || asset.property_tag_no,
+          serial_number: asset.details?.serial_number || asset.serial_number,
+          description: asset.details?.description || asset.description,
+          quantity: asset.details?.quantity || asset.quantity,
+          unit_name: asset.units?.unit_name,
+        })),
       }));
 
-      setWorkstations(transformedWorkstations);
+      // 2. SORT ALPHABETICALLY by Workstation Name
+      data.sort((a, b) =>
+        a.workstation_name.localeCompare(b.workstation_name, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      );
+
+      // Filter client-side if a specific lab is selected
+      if (selectedLab) {
+        data = data.filter((ws: any) => ws.lab_id === Number(selectedLab));
+      }
+
+      setWorkstations(data);
     } catch (error) {
       console.error("Failed to fetch workstations:", error);
     } finally {
@@ -76,267 +102,191 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
     }
   };
 
-  const handlePrint = () => {
-    const printContent = document.getElementById("printable-report");
-    if (!printContent) return;
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Please allow popups for this website to print the report.");
-      return;
-    }
-
-    const printStyles = `
-      <style>
-        @page { margin: 0.5in; }
-        body { 
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-          font-size: 12px; 
-          line-height: 1.4;
-          margin: 0;
-          padding: 0;
-        }
-        .report-header { 
-          text-align: center; 
-          margin-bottom: 30px; 
-          border-bottom: 2px solid #333;
-          padding-bottom: 20px;
-        }
-        .report-title { 
-          font-size: 24px; 
-          font-weight: bold; 
-          margin-bottom: 10px;
-          color: #1a1a1a;
-        }
-        .report-subtitle { 
-          font-size: 14px; 
-          color: #666; 
-          margin-bottom: 5px;
-        }
-        .workstation-section { 
-          margin-bottom: 40px; 
-          page-break-inside: avoid;
-        }
-        .workstation-header { 
-          background-color: #f8f9fa; 
-          padding: 12px; 
-          border: 1px solid #dee2e6;
-          border-radius: 4px;
-          margin-bottom: 15px;
-        }
-        .workstation-name { 
-          font-size: 16px; 
-          font-weight: bold; 
-          color: #1a1a1a;
-          margin-bottom: 5px;
-        }
-        .workstation-info { 
-          font-size: 13px; 
-          color: #666;
-        }
-        .assets-table { 
-          width: 100%; 
-          border-collapse: collapse; 
-          margin-bottom: 20px;
-        }
-        .assets-table th { 
-          background-color: #e9ecef; 
-          padding: 8px; 
-          text-align: left; 
-          font-weight: bold;
-          border: 1px solid #dee2e6;
-          font-size: 11px;
-        }
-        .assets-table td { 
-          padding: 6px 8px; 
-          border: 1px solid #dee2e6;
-          vertical-align: top;
-        }
-        .no-assets { 
-          font-style: italic; 
-          color: #666; 
-          text-align: center;
-          padding: 20px;
-        }
-        .summary-section {
-          margin-top: 30px;
-          padding: 15px;
-          background-color: #f8f9fa;
-          border: 1px solid #dee2e6;
-          border-radius: 4px;
-        }
-        .summary-title {
-          font-weight: bold;
-          margin-bottom: 10px;
-        }
-        @media print {
-          .no-print { display: none !important; }
-        }
-      </style>
-    `;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Workstation Inventory Report</title>
-          ${printStyles}
-        </head>
-        <body>
-          ${printContent.innerHTML}
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    printWindow.focus();
-    
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
-  };
-
   const getTotalAssets = () => {
-    return workstations.reduce((total, ws) => total + ws.assets.length, 0);
+    return workstations.reduce((sum, ws) => sum + ws.assets.length, 0);
   };
 
   const getTotalQuantity = () => {
-    return workstations.reduce((total, ws) => 
-      total + ws.assets.reduce((wsTotal, asset) => wsTotal + (asset.quantity || 0), 0), 0
-    );
+    return workstations.reduce((sum, ws) => {
+      return (
+        sum + ws.assets.reduce((aSum, asset) => aSum + (asset.quantity || 0), 0)
+      );
+    }, 0);
   };
 
-  if (!show) return null;
+  const handleDownload = async () => {
+    if (workstations.length === 0) return;
+
+    // A. Prepare Data for Template
+    const flattenedAssets = workstations.flatMap((ws) =>
+      ws.assets.map((asset) => ({
+        workstation_name: ws.workstation_name,
+        property_tag: asset.property_tag_no || "N/A",
+        serial_number: asset.serial_number || "N/A",
+        description: `${asset.unit_name || "Device"} - ${asset.description || ""}`,
+        remarks: "Good Condition",
+      })),
+    );
+
+    // B. Create the data object matching your Template Tags
+    const reportData = {
+      lab_name: workstations[0]?.lab_name || "Unassigned Laboratory",
+      custodian_name: user?.name || "Unknown Custodian",
+      report_date: new Date().toLocaleDateString(),
+      location: workstations[0]?.location || "Main Campus",
+      assets: flattenedAssets,
+    };
+
+    // C. Call the generator
+    try {
+      await generateTemplateReport(
+        "/inventory_template.docx",
+        reportData,
+        `Inventory_Report_${new Date().toISOString().split("T")[0]}.docx`,
+      );
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert(
+        "Failed to generate report. Please check if the template exists in the public folder.",
+      );
+    }
+  };
 
   return (
     <>
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 z-40"></div>
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div className="flex items-center justify-center min-h-screen px-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Workstation Inventory Report</h3>
+      {show && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-0 border w-11/12 md:w-4/5 lg:w-3/4 shadow-lg rounded-md bg-white flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-md">
+              <h3 className="text-xl font-semibold text-gray-900">
+                Workstation Inventory Report
+              </h3>
+
               <button
-                type="button"
-                className="text-white hover:text-gray-200 transition-colors"
-                onClick={onClose}
+                onClick={handleDownload}
+                disabled={loading || workstations.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium transition-colors"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FileDown className="w-4 h-4" />
+                Download Word Doc
               </button>
             </div>
 
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center space-x-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Filter by Laboratory
-                    </label>
-                    <select
-                      value={selectedLab}
-                      onChange={(e) => setSelectedLab(e.target.value)}
-                      className="px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">All Laboratories</option>
-                      {labs.map((lab) => (
-                        <option key={lab.lab_id} value={lab.lab_id}>
-                          {lab.lab_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="flex space-x-3">
-                  <button
-                    onClick={fetchWorkstations}
-                    disabled={loading}
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+            {/* Filter Section */}
+            <div className="p-4 border-b bg-white">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Filter by Lab:
+                </label>
+                <div className="relative">
+                  <select
+                    className={`border rounded px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none pr-8 ${
+                      user?.role === "Custodian"
+                        ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                        : "bg-white"
+                    }`}
+                    value={selectedLab}
+                    onChange={(e) => setSelectedLab(e.target.value)}
+                    disabled={user?.role === "Custodian"} // 3. LOCK FILTER
                   >
-                    {loading ? "Loading..." : "Refresh"}
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    disabled={loading || workstations.length === 0}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    <span>Print Report</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded border mb-6">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-2xl font-bold text-blue-600">{workstations.length}</div>
-                    <div className="text-sm text-gray-600">Total Workstations</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-green-600">{getTotalAssets()}</div>
-                    <div className="text-sm text-gray-600">Total Assets</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-purple-600">{getTotalQuantity()}</div>
-                    <div className="text-sm text-gray-600">Total Quantity</div>
-                  </div>
-                </div>
-              </div>
-
-              <div id="printable-report">
-                <div className="report-header">
-                  <div className="report-title">Workstation Inventory Report</div>
-                  <div className="report-subtitle">Generated on: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</div>
-                  <div className="report-subtitle">Generated by: {user?.name} ({user?.role})</div>
-                  {selectedLab && (
-                    <div className="report-subtitle">Laboratory: {labs.find(l => l.lab_id === Number(selectedLab))?.lab_name}</div>
+                    <option value="">All Laboratories</option>
+                    {labs.map((lab) => (
+                      <option key={lab.lab_id} value={lab.lab_id}>
+                        {lab.lab_name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Lock Icon for Custodians */}
+                  {user?.role === "Custodian" && (
+                    <Lock className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 transform -translate-y-1/2" />
                   )}
                 </div>
+              </div>
+            </div>
 
+            {/* Content - Scrollable */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-8">
                 {loading ? (
-                  <div className="text-center py-8">
-                    <div className="text-gray-500">Loading workstation data...</div>
+                  <div className="text-center py-10">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-2 text-gray-500">Loading report data...</p>
                   </div>
                 ) : workstations.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="text-gray-500">No workstations found</div>
+                  <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-lg border border-dashed">
+                    No workstations found for the selected criteria.
                   </div>
                 ) : (
                   workstations.map((workstation) => (
-                    <div key={workstation.workstation_id} className="workstation-section">
-                      <div className="workstation-header">
-                        <div className="workstation-name">{workstation.workstation_name}</div>
-                        <div className="workstation-info">
-                          Laboratory: {workstation.lab_name} | Location: {workstation.location}
+                    <div
+                      key={workstation.workstation_id}
+                      className="border rounded-lg overflow-hidden shadow-sm"
+                    >
+                      <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-lg text-gray-800">
+                            {workstation.workstation_name}
+                          </span>
+                          <span className="text-gray-500 text-sm ml-2">
+                            ({workstation.lab_name || "Unassigned"} -{" "}
+                            {workstation.location || "No Location"})
+                          </span>
                         </div>
+                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                          {workstation.assets.length} Assets
+                        </span>
                       </div>
 
                       {workstation.assets.length === 0 ? (
-                        <div className="no-assets">No assets assigned to this workstation</div>
+                        <div className="p-4 text-center text-gray-400 italic text-sm">
+                          No assets assigned to this workstation
+                        </div>
                       ) : (
-                        <table className="assets-table">
-                          <thead>
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
                             <tr>
-                              <th>Property Tag</th>
-                              <th>Serial Number</th>
-                              <th>Unit Name</th>
-                              <th>Description</th>
-                              <th>Quantity</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Property Tag
+                              </th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Serial No.
+                              </th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Unit
+                              </th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Description
+                              </th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                Qty
+                              </th>
                             </tr>
                           </thead>
-                          <tbody>
+                          <tbody className="bg-white divide-y divide-gray-200">
                             {workstation.assets.map((asset) => (
-                              <tr key={asset.asset_id}>
-                                <td>{asset.property_tag_no || "-"}</td>
-                                <td>{asset.serial_number || "-"}</td>
-                                <td>{asset.unit_name || "-"}</td>
-                                <td>{asset.description || "-"}</td>
-                                <td>{asset.quantity || 1}</td>
+                              <tr
+                                key={asset.asset_id}
+                                className="hover:bg-gray-50"
+                              >
+                                <td className="px-4 py-2 text-sm font-medium text-blue-600">
+                                  {asset.property_tag_no || "-"}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-500">
+                                  {asset.serial_number || "-"}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-900">
+                                  {asset.unit_name || "-"}
+                                </td>
+                                <td
+                                  className="px-4 py-2 text-sm text-gray-500 max-w-xs truncate"
+                                  title={asset.description || ""}
+                                >
+                                  {asset.description || "-"}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-900">
+                                  {asset.quantity || 1}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -346,25 +296,55 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
                   ))
                 )}
 
-                {workstations.length > 0 && (
-                  <div className="summary-section">
-                    <div className="summary-title">Report Summary</div>
-                    <div>Total Workstations: {workstations.length}</div>
-                    <div>Total Assets: {getTotalAssets()}</div>
-                    <div>Total Quantity: {getTotalQuantity()}</div>
+                {/* Summary Section */}
+                {!loading && workstations.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-8">
+                    <h4 className="font-bold text-blue-900 mb-2">
+                      Report Summary
+                    </h4>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div className="bg-white p-3 rounded border border-blue-100">
+                        <span className="text-gray-500 block">
+                          Total Workstations
+                        </span>
+                        <span className="text-xl font-bold text-blue-600">
+                          {workstations.length}
+                        </span>
+                      </div>
+                      <div className="bg-white p-3 rounded border border-blue-100">
+                        <span className="text-gray-500 block">
+                          Total Assets
+                        </span>
+                        <span className="text-xl font-bold text-blue-600">
+                          {getTotalAssets()}
+                        </span>
+                      </div>
+                      <div className="bg-white p-3 rounded border border-blue-100">
+                        <span className="text-gray-500 block">
+                          Total Quantity
+                        </span>
+                        <span className="text-xl font-bold text-blue-600">
+                          {getTotalQuantity()}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Footer */}
             <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex justify-end">
-              <button onClick={onClose} className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-100">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 transition-colors"
+              >
                 Close
               </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 };

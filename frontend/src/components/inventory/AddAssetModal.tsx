@@ -37,11 +37,20 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
 
   // 1. Defined State
   const [workstations, setWorkstations] = useState<any[]>([]);
-  const [labs, setLabs] = useState<{ lab_id: number; lab_name: string; in_charge_id?: number; in_charge_name?: string }[]>([]);
-  
+  const [labs, setLabs] = useState<
+    {
+      lab_id: number;
+      lab_name: string;
+      in_charge_id?: number;
+      in_charge_name?: string;
+    }[]
+  >([]);
+
   // Updated State: units now stores the device_type_id
   const [units, setUnits] = useState<Unit[]>([]);
-  const [deviceTypes, setDeviceTypes] = useState<{ device_type_id: number; device_type_name: string }[]>([]);
+  const [deviceTypes, setDeviceTypes] = useState<
+    { device_type_id: number; device_type_name: string }[]
+  >([]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -63,13 +72,19 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   // 2. Load Labs and auto-select for custodians
   useEffect(() => {
     if (show) {
-      api.get("/laboratories").then((res) => {
-        setLabs(res.data);
-        // Auto-select lab for custodians after labs are loaded
-        if (user && user.role === "Custodian" && user.lab_id) {
-          setFormData(prev => ({ ...prev, lab_id: user.lab_id.toString() }));
-        }
-      }).catch(err => console.error("Failed to load labs", err));
+      api
+        .get("/laboratories")
+        .then((res) => {
+          setLabs(res.data);
+          // Auto-select lab for custodians after labs are loaded
+          if (user && user.role === "Custodian" && user.lab_id) {
+            setFormData((prev) => ({
+              ...prev,
+              lab_id: user.lab_id.toString(),
+            }));
+          }
+        })
+        .catch((err) => console.error("Failed to load labs", err));
     }
   }, [show, user]);
 
@@ -82,7 +97,7 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
           const [deviceTypeRes, wsRes, unitRes] = await Promise.all([
             api.get("/device-types"),
             api.get("/workstations"),
-            api.get("/units"), 
+            api.get("/units"),
           ]);
           setDeviceTypes(deviceTypeRes.data);
           setWorkstations(wsRes.data);
@@ -125,7 +140,7 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
 
       // LOGIC: If Device Type changes, clear the Unit selection
       if (name === "device_type") {
-        newData.unit_id = ""; 
+        newData.unit_id = "";
       }
 
       return newData;
@@ -135,7 +150,7 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   const handleAddToList = () => {
     // --- FAILSAFE LOGIC FOR LAB SELECTION ---
     let targetLabId: number | null = null;
-    
+
     if (user?.role === "Custodian" && user.lab_id) {
       targetLabId = user.lab_id;
     } else {
@@ -160,14 +175,20 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
     // -------------------------------------
 
     // Check for duplicates in the CURRENT list
-    const unit = units.find(u => u.unit_id === Number(formData.unit_id));
-    const deviceType = deviceTypes.find(dt => dt.device_type_id === Number(formData.device_type));
-    const lab = labs.find(l => l.lab_id === targetLabId);
-    const workstation = formData.workstation_id ? workstations.find(ws => ws.workstation_id === Number(formData.workstation_id)) : null;
+    const unit = units.find((u) => u.unit_id === Number(formData.unit_id));
+    const deviceType = deviceTypes.find(
+      (dt) => dt.device_type_id === Number(formData.device_type),
+    );
+    const lab = labs.find((l) => l.lab_id === targetLabId);
+    const workstation = formData.workstation_id
+      ? workstations.find(
+          (ws) => ws.workstation_id === Number(formData.workstation_id),
+        )
+      : null;
 
     const isDuplicate = assets.some(
-      (asset) => asset.unit_name === unit?.unit_name && 
-                 asset.lab_id === targetLabId
+      (asset) =>
+        asset.unit_name === unit?.unit_name && asset.lab_id === targetLabId,
     );
 
     if (isDuplicate) {
@@ -184,17 +205,20 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
       date_of_purchase: formData.date_of_purchase,
       unit_id: Number(formData.unit_id),
       unit_name: unit?.unit_name || `Unit ID: ${formData.unit_id}`,
-      device_type: deviceType?.device_type_name || `Device Type: ${formData.device_type}`,
+      device_type:
+        deviceType?.device_type_name || `Device Type: ${formData.device_type}`,
       lab_id: targetLabId,
       lab_name: lab?.lab_name || `Lab ID: ${targetLabId}`,
-      workstation_id: formData.workstation_id ? Number(formData.workstation_id) : undefined,
+      workstation_id: formData.workstation_id
+        ? Number(formData.workstation_id)
+        : undefined,
       workstation_name: workstation?.workstation_name || undefined,
     };
 
     setAssets([...assets, newAsset]);
-    
+
     // Clear form for next entry (except lab selection)
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       property_tag_no: "",
       quantity: 1,
@@ -208,26 +232,27 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   };
 
   const handleRemoveFromList = (id: string) => {
-    setAssets(assets.filter(asset => asset.id !== id));
+    setAssets(assets.filter((asset) => asset.id !== id));
   };
 
   const handleSaveAll = async () => {
     if (assets.length === 0) return;
 
     // Validate that all assets have required fields
-    const invalidAssets = assets.filter(asset => 
-      !asset.unit_id || 
-      !asset.lab_id
+    const invalidAssets = assets.filter(
+      (asset) => !asset.unit_id || !asset.lab_id,
     );
 
     if (invalidAssets.length > 0) {
-      alert("Some assets are missing required fields (Unit or Lab). Please review the list.");
+      alert(
+        "Some assets are missing required fields (Unit or Lab). Please review the list.",
+      );
       return;
     }
 
     setSubmitting(true);
     try {
-      const payload = assets.map(asset => ({
+      const payload = assets.map((asset) => ({
         property_tag_no: asset.property_tag_no || null,
         quantity: asset.quantity,
         description: asset.description,
@@ -239,11 +264,14 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
       }));
 
       // --- DEBUGGING LOGS START ---
-      console.log("🚀 Debug: Submitting Assets Payload:", JSON.stringify(payload, null, 2));
+      console.log(
+        "🚀 Debug: Submitting Assets Payload:",
+        JSON.stringify(payload, null, 2),
+      );
       // --- DEBUGGING LOGS END ---
 
       await api.post("/inventory/batch", { assets: payload });
-      
+
       alert(`Successfully saved ${assets.length} asset(s)!`);
       handleClose();
       onSuccess();
@@ -255,11 +283,14 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
         console.error("❌ Debug: Status Code:", err.response.status);
       }
       // --- DEBUGGING LOGS END ---
-      
+
       if (err.response?.data?.details) {
-        alert(`Validation Error: ${err.response.data.details.join(', ')}`);
+        alert(`Validation Error: ${err.response.data.details.join(", ")}`);
       } else {
-        alert(err.response?.data?.error || "Failed to save assets. Please check all required fields.");
+        alert(
+          err.response?.data?.error ||
+            "Failed to save assets. Please check all required fields.",
+        );
       }
     } finally {
       setSubmitting(false);
@@ -284,7 +315,7 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
 
   // --- FILTER LOGIC ---
   const filteredUnits = units.filter(
-    (unit) => unit.device_type_id === Number(formData.device_type)
+    (unit) => unit.device_type_id === Number(formData.device_type),
   );
 
   if (!show) return null;
@@ -302,8 +333,18 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                 className="text-white hover:text-gray-200 transition-colors"
                 onClick={handleClose}
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -329,7 +370,7 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                     ))}
                   </select>
                 </div>
-                
+
                 {/* --- UPDATED UNIT NAME DROPDOWN --- */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -343,15 +384,17 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                     disabled={!formData.device_type}
                   >
                     <option value="">
-                      {!formData.device_type ? "Select Device Type First..." : "Select Unit..."}
+                      {!formData.device_type
+                        ? "Select Device Type First..."
+                        : "Select Unit..."}
                     </option>
-                    
-                    {/* Render filtered list */}
-                    {filteredUnits.map((unit) => (
-                      <option key={unit.unit_id} value={unit.unit_id}>
-                        {unit.unit_name}
-                      </option>
-                    ))}
+                    {filteredUnits
+                      .sort((a, b) => a.unit_name.localeCompare(b.unit_name))
+                      .map((unit) => (
+                        <option key={unit.unit_id} value={unit.unit_id}>
+                          {unit.unit_name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 {/* ---------------------------------- */}
@@ -421,17 +464,23 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                     <option value="">Select Lab...</option>
                     {labs.map((lab) => (
                       <option key={lab.lab_id} value={lab.lab_id}>
-                        {lab.lab_name} {lab.in_charge_id ? `(Manager: ID ${lab.in_charge_id})` : ''}
+                        {lab.lab_name}{" "}
+                        {lab.in_charge_id
+                          ? `(Manager: ID ${lab.in_charge_id})`
+                          : ""}
                       </option>
                     ))}
                   </select>
                   {user?.role === "Custodian" && (
-                    <p className="text-xs text-gray-500 mt-1">Locked to your assigned lab.</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Locked to your assigned lab.
+                    </p>
                   )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Workstation <span className="text-xs text-gray-500">(Optional)</span>
+                    Workstation{" "}
+                    <span className="text-xs text-gray-500">(Optional)</span>
                   </label>
                   <select
                     name="workstation_id"
@@ -441,9 +490,19 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                   >
                     <option value="">Select Workstation...</option>
                     {workstations
-                      .filter(ws => !formData.lab_id || ws.lab_id === Number(formData.lab_id))
+                      .filter(
+                        (ws) =>
+                          !formData.lab_id ||
+                          ws.lab_id === Number(formData.lab_id),
+                      )
+                      .sort((a, b) =>
+                        a.workstation_name.localeCompare(b.workstation_name),
+                      )
                       .map((ws) => (
-                        <option key={ws.workstation_id} value={ws.workstation_id}>
+                        <option
+                          key={ws.workstation_id}
+                          value={ws.workstation_id}
+                        >
                           {ws.workstation_name}
                         </option>
                       ))}
@@ -478,12 +537,17 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
               <div className="border rounded overflow-hidden">
                 <div className="bg-gray-100 px-4 py-2 border-b font-medium text-sm flex justify-between items-center">
                   <span>Pending Assets ({assets.length})</span>
-                  {assets.length > 0 && <span className="text-xs text-blue-600">Click "Save All" to finish!</span>}
+                  {assets.length > 0 && (
+                    <span className="text-xs text-blue-600">
+                      Click "Save All" to finish!
+                    </span>
+                  )}
                 </div>
-                
+
                 {assets.length === 0 ? (
                   <div className="p-6 text-center text-gray-500 text-sm">
-                    No assets added yet. Use the form above to add them to this list.
+                    No assets added yet. Use the form above to add them to this
+                    list.
                   </div>
                 ) : (
                   <div className="max-h-60 overflow-y-auto">
@@ -501,13 +565,21 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                       <tbody className="divide-y">
                         {assets.map((asset) => (
                           <tr key={asset.id}>
-                            <td className="px-4 py-2 font-medium">{asset.unit_name}</td>
-                            <td className="px-4 py-2 text-gray-500">{asset.property_tag_no || '-'}</td>
+                            <td className="px-4 py-2 font-medium">
+                              {asset.unit_name}
+                            </td>
+                            <td className="px-4 py-2 text-gray-500">
+                              {asset.property_tag_no || "-"}
+                            </td>
                             <td className="px-4 py-2">{asset.quantity}</td>
-                            <td className="px-4 py-2 text-gray-500">{asset.device_type}</td>
-                            <td className="px-4 py-2 text-gray-500">{asset.workstation_name || 'None'}</td>
+                            <td className="px-4 py-2 text-gray-500">
+                              {asset.device_type}
+                            </td>
+                            <td className="px-4 py-2 text-gray-500">
+                              {asset.workstation_name || "None"}
+                            </td>
                             <td className="px-4 py-2 text-center">
-                              <button 
+                              <button
                                 onClick={() => handleRemoveFromList(asset.id)}
                                 className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded"
                               >
@@ -525,7 +597,10 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
 
             {/* Footer */}
             <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex justify-end space-x-3">
-              <button onClick={handleClose} className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-100">
+              <button
+                onClick={handleClose}
+                className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-100"
+              >
                 Cancel
               </button>
               <button
