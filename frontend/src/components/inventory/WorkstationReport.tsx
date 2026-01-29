@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
-// 1. FIXED IMPORT: Import the new template generator
 import { generateTemplateReport } from "../../utils/generateTemplateReport";
 import { FileDown, Lock } from "lucide-react";
 
@@ -34,7 +33,7 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
   const [selectedLab, setSelectedLab] = useState<string>("");
   const [labs, setLabs] = useState<{ lab_id: number; lab_name: string }[]>([]);
 
-  // 1. NEW EFFECT: Auto-select and lock lab for Custodians
+  // 1. Auto-select and lock lab for Custodians
   useEffect(() => {
     if (show && user?.role === "Custodian" && user.lab_id) {
       setSelectedLab(user.lab_id.toString());
@@ -81,7 +80,7 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
         })),
       }));
 
-      // 2. SORT ALPHABETICALLY by Workstation Name
+      // 2. Sort Alphabetically by Workstation Name
       data.sort((a, b) =>
         a.workstation_name.localeCompare(b.workstation_name, undefined, {
           numeric: true,
@@ -89,7 +88,7 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
         }),
       );
 
-      // Filter client-side if a specific lab is selected
+      // Filter client-side
       if (selectedLab) {
         data = data.filter((ws: any) => ws.lab_id === Number(selectedLab));
       }
@@ -114,30 +113,33 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
     }, 0);
   };
 
+  // 3. Updated Download Handler (Nested Structure)
   const handleDownload = async () => {
     if (workstations.length === 0) return;
 
-    // A. Prepare Data for Template
-    const flattenedAssets = workstations.flatMap((ws) =>
-      ws.assets.map((asset) => ({
-        workstation_name: ws.workstation_name,
+    // A. Structure the data for Nested Loops (Workstation -> Assets)
+    const structuredWorkstations = workstations.map((ws) => ({
+      workstation_name: ws.workstation_name,
+      // Inner loop data
+      assets: ws.assets.map((asset) => ({
         property_tag: asset.property_tag_no || "N/A",
         serial_number: asset.serial_number || "N/A",
         description: `${asset.unit_name || "Device"} - ${asset.description || ""}`,
         remarks: "Good Condition",
       })),
-    );
+    }));
 
-    // B. Create the data object matching your Template Tags
+    // B. Create the final report object
     const reportData = {
       lab_name: workstations[0]?.lab_name || "Unassigned Laboratory",
-      custodian_name: user?.name || "Unknown Custodian",
+      custodian_name: (user?.name || "Unknown Custodian").toUpperCase(),
       report_date: new Date().toLocaleDateString(),
       location: workstations[0]?.location || "Main Campus",
-      assets: flattenedAssets,
+
+      // Pass the LIST of workstations (Outer Loop)
+      workstations: structuredWorkstations,
     };
 
-    // C. Call the generator
     try {
       await generateTemplateReport(
         "/inventory_template.docx",
@@ -188,7 +190,7 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
                     }`}
                     value={selectedLab}
                     onChange={(e) => setSelectedLab(e.target.value)}
-                    disabled={user?.role === "Custodian"} // 3. LOCK FILTER
+                    disabled={user?.role === "Custodian"}
                   >
                     <option value="">All Laboratories</option>
                     {labs.map((lab) => (
@@ -197,7 +199,6 @@ const WorkstationReport: React.FC<Props> = ({ show, onClose }) => {
                       </option>
                     ))}
                   </select>
-                  {/* Lock Icon for Custodians */}
                   {user?.role === "Custodian" && (
                     <Lock className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 transform -translate-y-1/2" />
                   )}
