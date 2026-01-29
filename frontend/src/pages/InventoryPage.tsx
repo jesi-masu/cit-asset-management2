@@ -7,6 +7,7 @@ import ViewWorkstationModal from "../components/inventory/ViewWorkstationModal";
 import EditWorkstationModal from "../components/inventory/EditWorkstationModal";
 import { useAuth } from "../context/AuthContext";
 import AddWorkstationModal from "../components/inventory/AddWorkstationModal";
+import WorkstationReport from "../components/inventory/WorkstationReport";
 
 interface Asset {
   asset_id: number;
@@ -70,6 +71,7 @@ const InventoryPage = () => {
   const [showViewWSModal, setShowViewWSModal] = useState(false);
   const [showEditWSModal, setShowEditWSModal] = useState(false);
   const [showUnassignedAssets, setShowUnassignedAssets] = useState(false);
+  const [showWorkstationReport, setShowWorkstationReport] = useState(false);
   const [laboratories, setLaboratories] = useState<Laboratory[]>([]);
   const [selectedLabId, setSelectedLabId] = useState<number | null>(null);
 
@@ -167,9 +169,10 @@ const InventoryPage = () => {
   const unassignedAssets = assets.filter(asset => !asset.workstation);
 
   // Filter workstations and assets by selected lab
-  const filteredWorkstations = selectedLabId 
+  const filteredWorkstations = (selectedLabId 
     ? workstations.filter(ws => ws.lab_id === selectedLabId)
-    : workstations;
+    : [...workstations] // Create a copy so we don't mutate state
+  ).sort((a, b) => a.workstation_name.localeCompare(b.workstation_name));
 
   const filteredUnassignedAssets = selectedLabId
     ? unassignedAssets.filter(asset => asset.lab_id === selectedLabId)
@@ -279,6 +282,18 @@ const InventoryPage = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 Add Asset
+              </button>
+            )}
+            
+            {(user?.role === "Admin" || user?.role === "Custodian") && (
+              <button
+                className="px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center"
+                onClick={() => setShowWorkstationReport(true)}
+              >
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Workstation Report
               </button>
             )}
           </div>
@@ -489,6 +504,12 @@ const InventoryPage = () => {
           setEditingWorkstation(null);
         }}
         onSuccess={handleEditWorkstationModalSuccess}
+      />
+
+      {/* Workstation Report Modal */}
+      <WorkstationReport
+        show={showWorkstationReport}
+        onClose={() => setShowWorkstationReport(false)}
       />
     </div>
   );
