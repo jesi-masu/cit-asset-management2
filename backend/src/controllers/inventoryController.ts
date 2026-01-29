@@ -7,7 +7,21 @@ const prisma = new PrismaClient();
 // 1. GET ALL ASSETS
 export const getInventory = async (req: Request, res: Response) => {
   try {
+    const { workstation_id, lab_id } = req.query;
+    
+    // Build where clause based on query parameters
+    let whereClause: any = {};
+    
+    if (workstation_id) {
+      whereClause.workstation_id = Number(workstation_id);
+    }
+    
+    if (lab_id) {
+      whereClause.lab_id = Number(lab_id);
+    }
+
     const assets = await prisma.inventory_assets.findMany({
+      where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: {
         details: true,
         laboratories: true,
@@ -29,7 +43,6 @@ export const getInventory = async (req: Request, res: Response) => {
 export const createAsset = async (req: Request, res: Response) => {
   try {
     const {
-      item_name,
       description,
       property_tag_no,
       serial_number,
@@ -55,7 +68,6 @@ export const createAsset = async (req: Request, res: Response) => {
         // Nested details record
         details: {
           create: {
-            item_name,
             description,
             property_tag_no,
             serial_number,
@@ -99,20 +111,12 @@ export const batchCreateAssets = async (req: Request, res: Response) => {
     for (let i = 0; i < assets.length; i++) {
       const asset = assets[i];
       
-      if (!asset.item_name?.trim()) {
-        validationErrors.push(`Asset ${i + 1}: Item name is required`);
-      }
-      
       if (!asset.lab_id) {
         validationErrors.push(`Asset ${i + 1}: Lab ID is required`);
       }
       
       if (!asset.unit_id) {
         validationErrors.push(`Asset ${i + 1}: Unit ID is required`);
-      }
-      
-      if (!asset.device_type) {
-        validationErrors.push(`Asset ${i + 1}: Device type is required`);
       }
     }
 
@@ -138,6 +142,41 @@ export const batchCreateAssets = async (req: Request, res: Response) => {
       });
     }
 
+    // Check if units exist
+    const unitIds = [...new Set(assets.map(a => a.unit_id))];
+    const existingUnits = await prisma.units.findMany({
+      where: { unit_id: { in: unitIds } },
+      select: { unit_id: true, unit_name: true }
+    });
+
+    const missingUnits = unitIds.filter(id => !existingUnits.find(unit => unit.unit_id === id));
+    if (missingUnits.length > 0) {
+      return res.status(400).json({ 
+        error: "Invalid unit IDs", 
+        details: `Unit IDs not found: ${missingUnits.join(', ')}` 
+      });
+    }
+
+    // Check if workstations exist (if provided)
+    const workstationIds = assets
+      .filter(a => a.workstation_id)
+      .map(a => a.workstation_id!);
+    
+    if (workstationIds.length > 0) {
+      const existingWorkstations = await prisma.workstations.findMany({
+        where: { workstation_id: { in: workstationIds } },
+        select: { workstation_id: true, workstation_name: true }
+      });
+
+      const missingWorkstations = workstationIds.filter(id => !existingWorkstations.find(ws => ws.workstation_id === id));
+      if (missingWorkstations.length > 0) {
+        return res.status(400).json({ 
+          error: "Invalid workstation IDs", 
+          details: `Workstation IDs not found: ${missingWorkstations.join(', ')}` 
+        });
+      }
+    }
+
     // Create assets in batch
     const createdAssets = await prisma.$transaction(async (tx) => {
       const results = [];
@@ -153,8 +192,7 @@ export const batchCreateAssets = async (req: Request, res: Response) => {
             // Nested details record
             details: {
               create: {
-                item_name: asset.item_name.trim(),
-                property_tag_no: asset.property_tag_no?.trim() || "",
+                property_tag_no: asset.property_tag_no || null,
                 description: asset.description?.trim() || "",
                 serial_number: asset.serial_number?.trim() || "",
                 quantity: Number(asset.quantity) || 1,
@@ -239,7 +277,6 @@ export const updateAsset = async (req: Request, res: Response) => {
     const assetId = Array.isArray(id) ? parseInt(id[0]) : parseInt(id);
     
     const {
-      item_name,
       description,
       property_tag_no,
       serial_number,
@@ -276,7 +313,6 @@ export const updateAsset = async (req: Request, res: Response) => {
         // Update nested details record
         details: existingAsset.details ? {
           update: {
-            item_name,
             description,
             property_tag_no,
             serial_number,
@@ -285,7 +321,6 @@ export const updateAsset = async (req: Request, res: Response) => {
           },
         } : {
           create: {
-            item_name,
             description,
             property_tag_no,
             serial_number,

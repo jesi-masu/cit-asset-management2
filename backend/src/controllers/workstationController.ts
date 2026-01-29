@@ -18,9 +18,9 @@ export const getAllWorkstations = async (req: Request, res: Response) => {
           include: {
             details: {
               select: {
-                item_name: true,
                 property_tag_no: true,
                 serial_number: true,
+                description: true,
               },
             },
             units: {

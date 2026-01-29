@@ -175,7 +175,6 @@ model asset_details {
   // Detailed Fields
   property_tag_no  String?   @unique(map: "property_tag_no") @db.VarChar(50)
   quantity         Int?      @default(1)
-  item_name        String?   @db.VarChar(100)
   description      String?   @db.Text
   serial_number    String?   @db.VarChar(100)
   date_of_purchase DateTime? @db.Date

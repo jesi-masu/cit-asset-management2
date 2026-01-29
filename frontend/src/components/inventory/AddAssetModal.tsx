@@ -18,7 +18,6 @@ interface Unit {
 
 interface AssetEntry {
   id: string;
-  item_name: string;
   property_tag_no: string;
   quantity: number;
   description: string;
@@ -46,7 +45,6 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
 
   // Form State
   const [formData, setFormData] = useState({
-    item_name: "",
     property_tag_no: "",
     quantity: 1,
     description: "",
@@ -101,7 +99,6 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   useEffect(() => {
     if (!show) {
       setFormData({
-        item_name: "",
         property_tag_no: "",
         quantity: 1,
         description: "",
@@ -136,8 +133,6 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   };
 
   const handleAddToList = () => {
-    // --- UPDATED HERE: Removed the item_name check ---
-    
     // --- FAILSAFE LOGIC FOR LAB SELECTION ---
     let targetLabId: number | null = null;
     
@@ -151,28 +146,37 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
       alert("Please select a lab first.");
       return;
     }
-    // -------------------------------------
 
-    // Check for duplicates in the CURRENT list
-    // Note: This might behave oddly if item_name is empty, as it will compare "" === ""
-    const isDuplicate = assets.some(
-      (asset) => asset.item_name.toLowerCase() === formData.item_name.trim().toLowerCase() && 
-                 asset.lab_id === targetLabId
-    );
-
-    if (isDuplicate && formData.item_name.trim() !== "") {
-      alert("This asset is already in your list below.");
+    // Validate required fields
+    if (!formData.unit_id) {
+      alert("Please select a unit.");
       return;
     }
 
+    if (!formData.device_type) {
+      alert("Please select a device type.");
+      return;
+    }
+    // -------------------------------------
+
+    // Check for duplicates in the CURRENT list
     const unit = units.find(u => u.unit_id === Number(formData.unit_id));
     const deviceType = deviceTypes.find(dt => dt.device_type_id === Number(formData.device_type));
     const lab = labs.find(l => l.lab_id === targetLabId);
     const workstation = formData.workstation_id ? workstations.find(ws => ws.workstation_id === Number(formData.workstation_id)) : null;
 
+    const isDuplicate = assets.some(
+      (asset) => asset.unit_name === unit?.unit_name && 
+                 asset.lab_id === targetLabId
+    );
+
+    if (isDuplicate) {
+      alert("This asset is already in your list below.");
+      return;
+    }
+
     const newAsset: AssetEntry = {
       id: Date.now().toString(),
-      item_name: formData.item_name.trim(),
       property_tag_no: formData.property_tag_no.trim(),
       quantity: Number(formData.quantity),
       description: formData.description.trim(),
@@ -192,7 +196,6 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
     // Clear form for next entry (except lab selection)
     setFormData(prev => ({
       ...prev,
-      item_name: "",
       property_tag_no: "",
       quantity: 1,
       description: "",
@@ -211,21 +214,33 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   const handleSaveAll = async () => {
     if (assets.length === 0) return;
 
+    // Validate that all assets have required fields
+    const invalidAssets = assets.filter(asset => 
+      !asset.unit_id || 
+      !asset.lab_id
+    );
+
+    if (invalidAssets.length > 0) {
+      alert("Some assets are missing required fields (Unit or Lab). Please review the list.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload = assets.map(asset => ({
-        item_name: asset.item_name,
-        property_tag_no: asset.property_tag_no,
+        property_tag_no: asset.property_tag_no || null,
         quantity: asset.quantity,
         description: asset.description,
         serial_number: asset.serial_number,
         date_of_purchase: asset.date_of_purchase,
         unit_id: asset.unit_id,
-        device_type: asset.device_type,
         lab_id: asset.lab_id,
         workstation_id: asset.workstation_id || null,
-        user_id: user?.id,
       }));
+
+      // --- DEBUGGING LOGS START ---
+      console.log("🚀 Debug: Submitting Assets Payload:", JSON.stringify(payload, null, 2));
+      // --- DEBUGGING LOGS END ---
 
       await api.post("/inventory/batch", { assets: payload });
       
@@ -233,8 +248,19 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
       handleClose();
       onSuccess();
     } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.error || "Failed to save assets.");
+      // --- DEBUGGING LOGS START ---
+      console.error("❌ Debug: Save Error Object:", err);
+      if (err.response) {
+        console.error("❌ Debug: Server Response Data:", err.response.data);
+        console.error("❌ Debug: Status Code:", err.response.status);
+      }
+      // --- DEBUGGING LOGS END ---
+      
+      if (err.response?.data?.details) {
+        alert(`Validation Error: ${err.response.data.details.join(', ')}`);
+      } else {
+        alert(err.response?.data?.error || "Failed to save assets. Please check all required fields.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -243,7 +269,6 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
   const handleClose = () => {
     setAssets([]);
     setFormData({
-      item_name: "",
       property_tag_no: "",
       quantity: 1,
       description: "",
@@ -465,11 +490,10 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                     <table className="w-full text-sm text-left">
                       <thead className="bg-gray-50 text-gray-500 sticky top-0">
                         <tr>
-                          <th className="px-4 py-2">Name</th>
+                          <th className="px-4 py-2">Unit Name</th>
                           <th className="px-4 py-2">Property Tag</th>
                           <th className="px-4 py-2">Qty</th>
                           <th className="px-4 py-2">Device Type</th>
-                          <th className="px-4 py-2">Unit Name</th>
                           <th className="px-4 py-2">Workstation</th>
                           <th className="px-4 py-2 text-center">Action</th>
                         </tr>
@@ -477,12 +501,10 @@ const AddAssetModal: React.FC<Props> = ({ show, onClose, onSuccess }) => {
                       <tbody className="divide-y">
                         {assets.map((asset) => (
                           <tr key={asset.id}>
-                            <td className="px-4 py-2 font-medium">{asset.item_name}</td>
+                            <td className="px-4 py-2 font-medium">{asset.unit_name}</td>
                             <td className="px-4 py-2 text-gray-500">{asset.property_tag_no || '-'}</td>
                             <td className="px-4 py-2">{asset.quantity}</td>
                             <td className="px-4 py-2 text-gray-500">{asset.device_type}</td>
-                            <td className="px-4 py-2 text-gray-500">{asset.unit_name}</td>
-
                             <td className="px-4 py-2 text-gray-500">{asset.workstation_name || 'None'}</td>
                             <td className="px-4 py-2 text-center">
                               <button 
