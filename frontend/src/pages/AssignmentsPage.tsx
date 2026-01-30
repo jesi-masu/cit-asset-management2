@@ -48,6 +48,26 @@ const AssignmentsPage: React.FC = () => {
 
   const handleAssignmentChange = async (userId: number, labId: number | null) => {
     try {
+<<<<<<< HEAD
+=======
+      // If assigning to a lab, check if user is a custodian and lab already has one
+      if (labId !== null) {
+        const user = users.find(u => u.user_id === userId);
+        if (user?.role === 'Custodian') {
+          const existingCustodian = users.find(u => 
+            u.lab_id === labId && 
+            u.role === 'Custodian' && 
+            u.user_id !== userId
+          );
+          
+          if (existingCustodian) {
+            setError(`Cannot assign ${user.full_name} to this laboratory. ${existingCustodian.full_name} is already assigned as the custodian.`);
+            return;
+          }
+        }
+      }
+      
+>>>>>>> 971b93b86c5c0a71b19cebccf80ba228d51119e6
       await assignUserToLab(userId, labId);
       await loadData(); // Refresh data
     } catch (err: any) {
