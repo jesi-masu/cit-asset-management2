@@ -37,22 +37,22 @@ model departments {
 }
 
 model laboratories {
-  lab_id        Int     @id @default(autoincrement())
-  lab_name      String  @db.VarChar(50)
-  location      String? @db.VarChar(50)
-  dept_id       Int?
+  lab_id   Int     @id @default(autoincrement())
+  lab_name String  @db.VarChar(50)
+  location String? @db.VarChar(50)
+  dept_id  Int?
   
   // Manager Link (The User in charge)
-  in_charge_id  Int?
-  manager       users?  @relation("LabManager", fields: [in_charge_id], references: [user_id], onDelete: SetNull, onUpdate: Cascade)
+  in_charge_id Int?
+  manager      users?  @relation("LabManager", fields: [in_charge_id], references: [user_id], onDelete: SetNull, onUpdate: Cascade)
 
   // Relations
   daily_reports    daily_reports[]
   inventory_assets inventory_assets[]
-  departments      departments?     @relation(fields: [dept_id], references: [dept_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_lab_dept")
+  departments      departments?       @relation(fields: [dept_id], references: [dept_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_lab_dept")
   
   // Workers Link (Custodians working here)
-  users            users[]          @relation("LabAssignment") 
+  users            users[]           @relation("LabAssignment") 
   workstations     workstations[]
 
   @@index([dept_id], map: "dept_id")
@@ -75,10 +75,10 @@ model workstations {
 // --- USERS ---
 
 model users {
-  user_id       Int         @id @default(autoincrement())
-  full_name     String      @db.VarChar(100)
-  email         String      @unique(map: "email") @db.VarChar(100)
-  password_hash String      @db.VarChar(255)
+  user_id       Int       @id @default(autoincrement())
+  full_name     String    @db.VarChar(100)
+  email         String    @unique(map: "email") @db.VarChar(100)
+  password_hash String    @db.VarChar(255)
   role          users_role? @default(Custodian)
   created_at    DateTime?   @default(now()) @db.Timestamp(0)
   
@@ -113,21 +113,37 @@ model daily_reports {
   @@index([user_id], map: "user_id")
 }
 
+// --- TASKS & CATEGORIES ---
+
+// New Table: Task Categories
+model task_categories {
+  category_id    Int              @id @default(autoincrement())
+  category_name  String           @unique @db.VarChar(50)
+  standard_tasks standard_tasks[]
+}
+
+// Updated Table: Standard Tasks
 model standard_tasks {
-  task_id                Int                      @id @default(autoincrement())
-  task_name              String                   @db.VarChar(100)
-  category               String?                  @db.VarChar(50)
+  task_id                Int                    @id @default(autoincrement())
+  task_name              String                 @db.VarChar(100)
+  
+  // Relationship to Categories
+  category_id            Int
+  task_category          task_categories        @relation(fields: [category_id], references: [category_id], onDelete: NoAction, onUpdate: NoAction)
+  
   report_checklist_items report_checklist_items[]
+
+  @@index([category_id], map: "category_id")
 }
 
 model report_checklist_items {
-  item_id          Int                                 @id @default(autoincrement())
+  item_id          Int                                     @id @default(autoincrement())
   report_id        Int
   task_id          Int
   task_status      report_checklist_items_task_status? @default(Done)
-  specific_remarks String?                             @db.VarChar(255)
-  daily_reports    daily_reports                       @relation(fields: [report_id], references: [report_id], onDelete: Cascade, onUpdate: NoAction)
-  standard_tasks   standard_tasks                      @relation(fields: [task_id], references: [task_id], onDelete: NoAction, onUpdate: NoAction)
+  specific_remarks String?                                 @db.VarChar(255)
+  daily_reports    daily_reports                           @relation(fields: [report_id], references: [report_id], onDelete: Cascade, onUpdate: NoAction)
+  standard_tasks   standard_tasks                          @relation(fields: [task_id], references: [task_id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([report_id], map: "report_id")
   @@index([task_id], map: "task_id")
@@ -217,4 +233,3 @@ enum daily_reports_status {
   Submitted
   Approved
 }
-
